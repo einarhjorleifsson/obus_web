@@ -1,0 +1,35 @@
+---
+title: ""
+---
+
+
+```{r}
+#| echo: false
+library(mapview)
+library(sf)
+library(tidyverse)
+library(duckdb)
+library(duckdbfs)
+hh <- 
+  open_dataset("http://heima.hafro.is/~einarhj/datras_latin/HH.parquet") |>
+  filter(Year == 2023) |> 
+  select(.id, Survey, Quarter, 
+         lon1 = ShootLong, lat1 = ShootLat,
+         lon2 = HaulLong, lat2 = HaulLat) |> 
+  group_by(Survey) |> 
+  filter(Quarter == max(Quarter, na.rm = TRUE)) |> 
+  ungroup() |> 
+  collect()
+tows <- 
+  bind_rows(hh |> select(.id, Survey, Quarter, lon = lon1, lat = lat1),
+            hh |> select(.id, Survey, Quarter, lon = lon2, lat = lat2)) |> 
+  st_as_sf(coords = c("lon", "lat"),
+           crs = 4326) |> 
+  unite(Survey, Quarter, col = "Survey", sep = "-") |> 
+  group_by(.id, Survey) |> 
+  summarise(do_union = FALSE,
+            .groups = "drop") |> 
+  st_cast("LINESTRING")
+mapview(tows, zcol = "Survey")
+```
+

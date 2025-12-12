@@ -4,7 +4,7 @@ project:
 website:
   title: "obus"
   site-url: https://heima.hafro.is/~einarhj/obus
-  # favicon: "image/hafro_logo.pngxxx"
+  # favicon: "image/hafro_logo.png"
   navbar:
     right:
       - text: Notes
@@ -12,7 +12,7 @@ website:
           - download.qmd
       - ramb-list.qmd # add ramb blog to the navbar
       - icon: github
-        href: https://github.com/einarhjorleifsson/xxx
+        href: https://github.com/einarhjorleifsson/obus_web
 
 format:
   html:
