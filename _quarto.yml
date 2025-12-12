@@ -1,0 +1,28 @@
+project:
+  type: website
+
+website:
+  title: "obus"
+  site-url: https://heima.hafro.is/~einarhj/obus
+  # favicon: "image/hafro_logo.pngxxx"
+  navbar:
+    right:
+      - text: Notes
+        menu:
+          - download.qmd
+      - ramb-list.qmd # add ramb blog to the navbar
+      - icon: github
+        href: https://github.com/einarhjorleifsson/xxx
+
+format:
+  html:
+    theme: flatly
+    css: styles.css
+    toc: false
+    message: false
+    warning: false
+    echo: true
+    code-fold: true
+execute:
+  cache: false
+  freeze: true
