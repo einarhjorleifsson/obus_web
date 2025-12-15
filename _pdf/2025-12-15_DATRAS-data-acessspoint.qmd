@@ -1,0 +1,183 @@
+---
+title: "DATRAS data accesspoint"
+author: Einar Hjörleifsson
+date: "2025-12-15"
+format: pdf
+echo: true
+warning: false
+message: false
+---
+
+
+# Description
+
+This document provides a comparison of relative speed in accessing data using the current Web Service API and a parquet file system hosted on a http-server accessed via DuckDB. Some attempt is made to explain the DuckDB/parquet magic. Provision of a sweep of web based parquet files as access point to DATRAS data is though only sustainable if it is adopted, hosted and maintained by the ICES datacenter."
+
+# Packages needed
+
+```{r load}
+library(icesDatras)   # to time check the current connection
+library(dplyr)        # the usual culprit
+library(ggplot2)      #  ... ditto
+library(duckdb)       # the magic
+library(duckdbfs)     # a simpler wrapper around duckdb
+library(tictoc)       # to report code execution timing
+library(lobstr)       # to report on object size
+library(santoku)      # A nicer cut
+library(obus)         # some scripts that may be taken up in an official package
+                      # installing: remotes::install_github("einarhjorleifsson/obus")
+```
+
+# Two modes of DATRAS data access
+
+## Via API
+
+### The old faithful
+
+ICES currently provide access through a robust and well tested  [Web Services APIs](https://datras.ices.dk/WebServices/Webservices.aspx). And for R users ICES provides a convenient package, [icesDatras](https://github.com/ices-tools-prod/icesDatras) to access the data. Here we use the API to extract one of most data rich survey in terms of records, the NS-IBTS:
+
+```{r slow}
+tic()
+hl_nsibts_slow <- icesDatras::getDATRAS("HL", survey = "NS-IBTS", 
+                                        years = 1965:2025, quarters = 1:4)
+toc()
+```
+
+So we are talking about some  10's of minutes.
+
+### The faster alternative
+
+An experimental, not yet official API has been made available for testing purpose. Besides providing a much faster response it also return the latin species name. The code has been wrapped into a function and bundled into a temporary experimental package ({obus}). Let's time test the extraction of the NS-IBTS length data:
+
+
+```{r fast}
+tic()
+hl_nsibts_fast <- obus::dr_get_data_latin(recordtype = "HL", survey = "NS-IBTS",
+                                          year = "1965:2025", quarter = "1:4") 
+toc()
+```
+
+So this took some 10's of seconds which is not bad relative to the old faithful API run above.
+
+
+## Access via http hosted parquet file
+
+An experimental setup of the DATRAS tables hosted as parquet files on a http-server was temporarily setup. We can establish a connection to the DATRAS length file as follows (happens almost instantaneously):
+
+```{r connection}
+tic()
+hl_con <- 
+  duckdbfs::open_dataset("https://heima.hafro.is/~einarhj/datras_latin/HL.parquet")
+toc()
+```
+
+Let's take a peek at the data, limiting ourselves to some few variables:
+
+```{r peek}
+hl_con |> 
+  select(Survey, Quarter, Year, LngtClass, HLNoAtLngt, ScientificName_WoRMS) |>
+  glimpse()
+```
+
+We can check the object size:
+
+```{r howbig}
+lobstr::obj_size(hl_con)
+```
+
+Let´s emulate the above, extracting the full NS-IBTS length dataset:
+
+```{r emulation}
+tic()
+hl_nsibts_parquet <- 
+  hl_con |> 
+  filter(Survey %in% "NS-IBTS",
+         Year %in% 1965:2025,
+         Quarter %in% 1:4) |> 
+  collect()
+toc()
+```
+
+So now we are talking about some five seconds to get the NS-IBTS length data from a http web space into R memory. But the key thing here is that we have actually started off by connecting to the whole DATRAS dataset, not just the NS-IBTS data. So one could actually jump right into doing some fancy analysis:
+
+```{r demo}
+tic()
+# Grid resolution
+dx <- 1
+dy <- dx / 2
+# Connect to the station table (has the coordinates
+hl_con <- 
+  duckdbfs::open_dataset("https://heima.hafro.is/~einarhj/datras_latin/HL.parquet")
+hh_con <- 
+  duckdbfs::open_dataset("https://heima.hafro.is/~einarhj/datras_latin/HH.parquet")
+# Limit analysis to certain time and space
+hh_con |> 
+  filter(Year %in% 2001:2010,
+         between(ShootLong, -20, 25),
+         between(ShootLat, -Inf, 65)) |> 
+  # assign coordinates to grid
+  mutate(lon = ShootLong%/%dx * dx + dx/2,
+         lat = ShootLat%/%dy * dy + dy/2) |> 
+  left_join(hl_con |> 
+              select(.id, ScientificName_WoRMS),
+           by = join_by(.id)) |>
+  # analyse by grid
+  group_by(lon, lat) |> 
+  summarise(n_taxa = n_distinct(ScientificName_WoRMS),
+            .groups = "drop") |> 
+  # load data into R memory because santoku::chop not in duckdb lingo
+  #  chop is also nicer than cut - keeps things more orderly
+  collect() |> 
+  mutate(n_taxa = chop(n_taxa, breaks = c(0, 25, 50, 75, 100, 125, 150, 200))) |> 
+  ggplot(aes(lon, lat, fill = n_taxa)) +
+  geom_tile() +
+  scale_fill_viridis_d(option = "inferno", direction = -1) +
+  coord_quickmap() +
+  labs(x = NULL, y = NULL, fill = "Number of\ndistinct taxa",
+       caption = "DATRAS 2001-2010, core area: Number of distinct taxa reported per rectangle")
+toc()
+```
+
+And this took less than 5 seconds.
+
+The key here is that using the parquet/DuckDB access point to the DATRAS data one can setup any kind of a query on any of the variables in the data on the client-side. I.e. one does not have to pre-determine what kind of a user request may be of most interest and then setup a program on the server-side to handle that.
+
+In addition, if one were to do the above based on the conventional Web Service API, which currently e.g. is only based on processing one survey at a time it is easy to conceptually envision the additional code needed within R prior to performing the above kind of an analysis (no matter how stupid).
+
+## What happens when we call `open_dataset`?
+
+General description:
+
+* Start a temporary in-process DuckDB SQL database
+* DuckDB establishes as database connection to the specified files.
+  * In this case the format is parquet, a highly compressed column wise storage system, with variable type among other things stored as metadata. The sheer magic, particularly when it comes querying and then reading and transferring the minimum amount of data as possible (e.g. over the web) is that larger parquet files are stored as "row chunks" (see below).
+  * In this case the file is online (URLs), but the source could also have been local files or files in a cloud storage (like Amazon S3).
+* The function sets up the parquet file as if it were a table in a database, creating a view. A "view" is like a peek into the data — it doesn’t move or copy the underlying data but makes it look like a database table.
+* When we call the dplyr functions (select, filter, joins, group_by, summarise, ...) they are automatically translated into SQL (via the {dbplyr} and {DBI}) and that code is then being passed to DuckDB for further processing and execution.
+* Behind the scene DuckDB does additional magic like optimizing the query and (I think) spread the task among available processors.
+
+Parquet files are a bit complicated to explain. It would be a disservice to liken them to e.g. csv files on steroids - they are more than that. Larger parquet files, beside being stored on disk column-wise, are also split into "row chunks" (not to be confused with physical file partitioning like Hive). For each row chunk there is a a metadata table within the parquet file, that stores things like the minimum and maximum value or a list of unique categories. The purpose of this metadata construct is to optimizes access within a single file, enabling skipping irrelevant physical blocks of data.
+
+So in the specific case above, all "row groups" metadata where:
+
+* min-max Year is outside 2001 to 2010 are excluded
+* min-max ShootLong is outside -20 and 25 are excluded
+* max of ShootLat is outside 65 are excluded
+
+when it comes to data transfer over the web.
+
+Because of the column-wise storage of data within parquet, only the variables (columns) .id, Year, ShootLong, ShootLat and ScientificName_WoRMS are addressed and transferred over the web, rest being totally ignored. DuckDB then on the client-side does the transformation and summarization. Hence the process from source to a plot took only some seconds.
+
+Now of course R "knows" nothing about the above until it comes to importing the data into R (the collect part, only some 500 rows (ICES rectangle) and 3 variables (lon, lat, n_taxa)). We just use R to pass all the heavy lifting to DuckDB/parquet via some simple function calls.
+
+Neither actually does the server-side part of the process (e.g. in this case https://heima.hafro.is) need to know much. It needs of course to handle some reasonable traffic and to know how to handle range-based requests. Otherwise it is just "dumb" in the terms of data processing — it simply streams data from the file as requested by DuckDB.
+
+## How were the parquet files generated?
+
+In this feasibility study, not having direct access to the DATRAS data one has to resort to the [experimental web service API](https://datras.ices.dk/Data_products/Download/GetDATRAS.asp). The code can be found [here](download.gmd). Of course if one were sitting on the data within the ICES firewall, one would use a more efficient route.
+
+In this study, the three main DATRAS tables (HH, HL and CA) are stored as single files. A potential partitioning of the files may be warranted, from a performance, maintenance or anticipated user main interest.
+
+Currently the code is executed via a Linux cron job, execution time set just past UTC midnight. Meaning that the data on https://heima.hafro.is/~einarhj/datras_latin should never be more than a day old.
+
+It needs not to be stated that a provision of a sweep of parquet files as access point to DATRAS data as demonstrated above is only sustainable if it is adopted, hosted and maintained by the ICES Datacenter.

@@ -3,10 +3,15 @@
 .RData
 .Ruserdata
 
+obus_web.Rproj
+desktop.ini
+
 /.quarto/
 
 _freeze/
 _older/
 _ramb/
 _site/
+data-raw/
 
+*.pdf
