@@ -6,7 +6,7 @@ date: "2025-15-12"
 echo: true
 draft: false
 cache: false
-freeze: false
+freeze: true
 ---
 
 # Packages needed
@@ -165,7 +165,7 @@ Neither actually does the server-side part of the process (e.g. in this case htt
 
 ## How were the parquet files generated?
 
-In this feasibility study, not having direct access to the DATRAS data one has to resort to the [experimental web service API](https://datras.ices.dk/Data_products/Download/GetDATRAS.asp). The code can be found [here](download.gmd). Of course if one were sitting on the data within the ICES firewall, one would use a more efficient route.
+In this feasibility study, not having direct access to the DATRAS data one has to resort to the [experimental web service API](https://datras.ices.dk/Data_products/Download/GetDATRAS.asp). The code can be found [here](https://heima.hafro.is/~einarhj/obus/download.html). Of course if one were sitting on the data within the ICES firewall, one would use a more efficient route.
 
 In this study, the three main DATRAS tables (HH, HL and CA) are stored as single files. A potential partitioning of the files may be warranted, from a performance, maintenance or anticipated user main interest.
 
