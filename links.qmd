@@ -1,0 +1,7 @@
+---
+title: "Links"
+---
+
+## DATRAS
+
+* [FAQs](https://www.ices.dk/data/Documents/DATRAS/DATRAS_FAQs.pdf) contains everything you ever wanted to know about DATRAS (but were afraid to ask).

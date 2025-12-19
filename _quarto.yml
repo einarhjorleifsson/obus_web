@@ -10,6 +10,7 @@ website:
       - text: Notes
         menu:
           - download.qmd
+          - links.qmd
       - ramb-list.qmd # add ramb blog to the navbar
       - icon: github
         href: https://github.com/einarhjorleifsson/obus_web

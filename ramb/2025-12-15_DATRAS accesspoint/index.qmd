@@ -143,7 +143,7 @@ General description:
 * DuckDB establishes as database connection to the specified files.
   * In this case the format is parquet, a highly compressed column wise storage system, with variable type among other things stored as metadata. The sheer magic, particularly when it comes querying and then reading and transferring the minimum amount of data as possible (e.g. over the web) is that larger parquet files are stored as "row chunks" (see below).
   * In this case the file is online (URLs), but the source could also have been local files or files in a cloud storage (like Amazon S3).
-* The function sets up the parquet file as if it were a table in a database, creating a view. A "view" is like a peek into the data — it doesn’t move or copy the underlying data but makes it look like a database table.
+* DuckDB sets up the parquet file as if it were a table in a database, creating a view. A "view" is like a peek into the data — it doesn’t move or copy the underlying data but makes it look like a database table.
 * When we call the dplyr functions (select, filter, joins, group_by, summarise, ...) they are automatically translated into SQL (via the {dbplyr} and {DBI}) and that code is then being passed to DuckDB for further processing and execution.
 * Behind the scene DuckDB does additional magic like optimizing the query and (I think) spread the task among available processors.
 
